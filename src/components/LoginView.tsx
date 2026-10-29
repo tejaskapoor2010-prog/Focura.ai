@@ -34,9 +34,6 @@ interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
 }
 
-const DEFAULT_USER_EMAIL = 'tejaskapoor2010@gmail.com';
-const DEFAULT_USER_NAME = 'Tejas Kapoor';
-
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [step, setStep] = useState<'auth' | 'stream' | 'goal'>('auth');
   const [authMethod, setAuthMethod] = useState<'google' | 'email'>('email');
@@ -140,10 +137,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       const isPopupBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup') || err?.code === 'auth/cancelled-popup-request';
 
       if (isDomainError) {
-        // Firebase unauthorized domain -> provide instant 1-click fallback so user is never blocked
+        // Firebase unauthorized domain -> provide direct email fallback so user is never blocked
         setShowDomainGuide(true);
         setAuthError(
-          `Firebase Google Auth domain unauthorized hai. Aapko wait karne ki zaroorat nahi hai: niche 1-click se "${DEFAULT_USER_EMAIL}" ke roop mein turant sign in karein!`
+          'Firebase Google Auth domain unauthorized hai. Aap bina kisi rukawat ke niche apna Google email enter karke direct login kar sakte hain.'
         );
         setIsGoogleModalOpen(true);
       } else if (isPopupBlocked) {
@@ -431,21 +428,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </div>
               )}
 
-              {/* 1-Click Instant Login for Tejas Kapoor */}
-              <button
-                type="button"
-                disabled={isFirebaseLoading}
-                onClick={() => handleGoogleQuickSelect(DEFAULT_USER_EMAIL, DEFAULT_USER_NAME)}
-                className="w-full flex items-center justify-between py-2.5 px-3.5 mb-3 rounded-xl border border-emerald-500/40 bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-200 text-xs font-semibold transition-all shadow-md group"
-              >
-                <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-emerald-400 fill-emerald-400" />
-                  <span>1-Click Sign In as <strong>{DEFAULT_USER_NAME}</strong></span>
-                </div>
-                <span className="text-[10px] font-mono text-emerald-400/80 bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-700/50 group-hover:bg-emerald-800">
-                  Instant
-                </span>
-              </button>
+
 
               {/* Real Google Sign In Direct Option */}
               <button
@@ -782,43 +765,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               </button>
             </div>
 
-            {/* Instant Login for Tejas Kapoor */}
-            <div className="my-4 p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-emerald-400 fill-emerald-400" />
-                  Instant One-Click Login
-                </span>
-                <span className="text-[10px] text-emerald-400/80 font-mono">Recommended</span>
-              </div>
-              <p className="text-xs text-zinc-300 mb-3">
-                Aap bina kisi domain error ke turant apne Google account se sign in kar sakte hain:
-              </p>
-              <button
-                type="button"
-                disabled={isFirebaseLoading}
-                onClick={() => handleGoogleQuickSelect(DEFAULT_USER_EMAIL, DEFAULT_USER_NAME)}
-                className="w-full py-2.5 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isFirebaseLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-black" />
-                ) : (
-                  <>
-                    <span>Sign in as {DEFAULT_USER_NAME} ({DEFAULT_USER_EMAIL})</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="relative my-4 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-800" />
-              </div>
-              <span className="relative bg-zinc-950 px-3 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                Or Use Another Google ID
-              </span>
-            </div>
+            <p className="text-xs text-zinc-400 my-4 leading-relaxed">
+              Apna Google Email enter karein. Agar aapka account pehle se Firebase mein hai toh direct login ho jaayega:
+            </p>
 
             {/* Direct Google Account Form */}
             <form
@@ -841,7 +790,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   type="email"
                   id="customGoogleEmail"
                   required
-                  defaultValue={email || DEFAULT_USER_EMAIL}
+                  defaultValue={email}
                   placeholder="your.google.id@gmail.com"
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:border-white focus:outline-none"
                 />
@@ -854,8 +803,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 <input
                   type="text"
                   id="customGoogleName"
-                  defaultValue={name || DEFAULT_USER_NAME}
-                  placeholder="e.g. Tejas Kapoor"
+                  defaultValue={name}
+                  placeholder="Enter your full name"
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:border-white focus:outline-none"
                 />
               </div>
