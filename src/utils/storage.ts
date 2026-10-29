@@ -34,6 +34,19 @@ export function getCurrentUser(): UserProfile | null {
 }
 
 /**
+ * Returns user profile by ID from local cache if present
+ */
+export function getUserProfileById(userId: string): UserProfile | null {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEYS.USER_PREFIX}${userId}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Saves or updates a user profile both locally and to Firestore
  */
 export function saveUserProfile(user: UserProfile): void {

@@ -3,8 +3,12 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInAnonymously,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  updateProfile,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -16,7 +20,9 @@ import {
   getDocs, 
   getDocFromServer,
   query,
-  orderBy
+  orderBy,
+  where,
+  limit
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { UserProfile, StudySession, RevisionCard } from './types';
@@ -28,6 +34,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Error logger conformant to guideline
 export enum OperationType {
@@ -74,9 +81,93 @@ export async function signInWithGooglePopup(): Promise<FirebaseUser | null> {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error('Google Sign-In Error:', error);
+    console.warn('Google Sign-In Error / Popup blocked:', error);
     throw error;
   }
+}
+
+/**
+ * Ensures an active Firebase session exists so Firestore rules allow reads/writes
+ */
+export async function ensureFirebaseAuth(): Promise<FirebaseUser | null> {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (err) {
+    console.warn('Firebase anonymous fallback auth note:', err);
+    return null;
+  }
+}
+
+/**
+ * Signs in with email & password, or registers if first time, with graceful session fallback
+ */
+export async function authenticateWithEmailOrFallback(email: string, password?: string): Promise<FirebaseUser | null> {
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (password && password.length >= 6) {
+    try {
+      const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      return res.user;
+    } catch (err: any) {
+      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
+        try {
+          const createRes = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          return createRes.user;
+        } catch (createErr) {
+          console.warn('createUserWithEmailAndPassword fallback:', createErr);
+        }
+      }
+    }
+  }
+
+  // Ensure Firebase authenticated session is active
+  return await ensureFirebaseAuth();
+}
+
+/**
+ * Finds an existing user profile in Firestore by email or userId
+ */
+export async function findUserProfileInFirestore(emailOrId: string): Promise<UserProfile | null> {
+  const clean = emailOrId.trim().toLowerCase();
+  const safeId = 'usr_' + clean.replace(/[^a-zA-Z0-9]/g, '_');
+
+  // 1. Try safeId directly
+  try {
+    const docSnap = await getDoc(doc(db, 'users', safeId));
+    if (docSnap.exists()) {
+      return docSnap.data() as UserProfile;
+    }
+  } catch (e) {
+    //
+  }
+
+  // 2. Try raw input as doc ID (in case doc was saved by raw UID)
+  try {
+    const docSnap = await getDoc(doc(db, 'users', emailOrId.trim()));
+    if (docSnap.exists()) {
+      return docSnap.data() as UserProfile;
+    }
+  } catch (e) {
+    //
+  }
+
+  // 3. Try query by email field
+  try {
+    const colRef = collection(db, 'users');
+    const q = query(colRef, where('email', '==', clean), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs[0].data() as UserProfile;
+    }
+  } catch (e) {
+    //
+  }
+
+  return null;
 }
 
 /**
