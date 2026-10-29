@@ -4,12 +4,12 @@ import { STREAMS_CONFIG } from '../data/streams';
 import { FocuraLogo } from './FocuraLogo';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
-  signInWithGooglePopup, 
-  authenticateWithEmailOrFallback, 
-  findUserProfileInFirestore, 
-  syncUserProfileToFirestore,
-  ensureFirebaseAuth
-} from '../firebase';
+  signInWithSupabaseGoogle, 
+  authenticateWithSupabaseEmail, 
+  findUserProfileInSupabase, 
+  syncUserProfileToSupabase,
+  isSupabaseConfigured
+} from '../supabase';
 import { getAllRegisteredUsers, getUserProfileById } from '../utils/storage';
 import { 
   Sparkles, 
@@ -23,10 +23,7 @@ import {
   Database, 
   AlertCircle, 
   UserCheck,
-  Copy,
-  Check,
   ExternalLink,
-  Zap,
   Info
 } from 'lucide-react';
 
@@ -34,36 +31,10 @@ interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
 }
 
-async function findSqlUser(cleanEmail: string): Promise<UserProfile | null> {
-  try {
-    const res = await fetch(`/api/db/user-by-email/${encodeURIComponent(cleanEmail)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.user) {
-        return {
-          id: data.user.uid,
-          name: data.user.name,
-          email: data.user.email,
-          avatar: data.user.avatar || '',
-          stream: (data.user.stream as StreamType) || 'science',
-          targetExam: data.user.targetExam || undefined,
-          dailyGoalMinutes: data.user.dailyGoalMinutes || 120,
-          streakDays: data.user.streakDays || 1,
-          lastActiveDate: data.user.lastActiveDate || new Date().toISOString().split('T')[0],
-          provider: (data.user.provider as 'google' | 'email') || 'email',
-          createdAt: data.user.createdAt || new Date().toISOString(),
-          subscription: data.user.subscription ? JSON.parse(data.user.subscription) : undefined,
-        };
-      }
-    }
-  } catch {}
-  return null;
-}
-
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [step, setStep] = useState<'auth' | 'stream' | 'goal'>('auth');
   const [authMethod, setAuthMethod] = useState<'google' | 'email'>('email');
-  const [isFirebaseLoading, setIsFirebaseLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -75,40 +46,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [targetExam, setTargetExam] = useState('');
   const [dailyGoalMinutes, setDailyGoalMinutes] = useState(120);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-  const [copiedDomain, setCopiedDomain] = useState(false);
-  const [showDomainGuide, setShowDomainGuide] = useState(false);
   const [recentUsers, setRecentUsers] = useState<Array<{ id: string; email: string; name: string; avatar: string }>>([]);
-
-  // Current domain for Firebase authorization
-  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'run.app';
 
   useEffect(() => {
     // Load local recent users for fast 1-click resume
     const users = getAllRegisteredUsers();
     setRecentUsers(users.slice(0, 3));
-    // Pre-warm Firebase auth session
-    ensureFirebaseAuth().catch(() => {});
   }, []);
-
-  const handleCopyDomain = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(currentHostname);
-      setCopiedDomain(true);
-      setTimeout(() => setCopiedDomain(false), 2500);
-    }
-  };
 
   // Quick Resume for existing accounts
   const handleQuickResume = async (account: { id: string; email: string; name: string }) => {
-    setIsFirebaseLoading(true);
-    setStatusMessage('Restoring profile from Firebase...');
+    setIsLoading(true);
+    setStatusMessage('Restoring profile from Supabase...');
     setAuthError(null);
     try {
-      await ensureFirebaseAuth().catch(() => {});
-      // Try to get fresh profile from Firestore first, then fallback to local
-      const firestoreProfile = await findUserProfileInFirestore(account.email) || await findUserProfileInFirestore(account.id);
-      if (firestoreProfile) {
-        onLogin(firestoreProfile);
+      const supabaseProfile = await findUserProfileInSupabase(account.email) || await findUserProfileInSupabase(account.id);
+      if (supabaseProfile) {
+        onLogin(supabaseProfile);
         return;
       }
       const localProfile = getUserProfileById(account.id);
@@ -123,76 +77,47 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       setEmail(account.email);
       setName(account.name);
     } finally {
-      setIsFirebaseLoading(false);
+      setIsLoading(false);
       setStatusMessage('');
     }
   };
 
-  // Real Firebase Google Sign-In with automatic unauthorized-domain fallback
-  const handleRealFirebaseGoogleSignIn = async () => {
-    setIsFirebaseLoading(true);
+  // Google Sign-In with Supabase
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
     setAuthError(null);
-    setStatusMessage('Opening Google Sign-In...');
+    setStatusMessage('Connecting to Google Account...');
     try {
-      const fbUser = await signInWithGooglePopup();
-      if (fbUser && fbUser.email) {
-        setStatusMessage('Checking existing account in Firebase Firestore...');
-        const cleanEmail = fbUser.email.toLowerCase();
-        const resolvedName = fbUser.displayName || cleanEmail.split('@')[0];
-
-        // 1. Check if user already exists in Firestore
-        const existing = await findUserProfileInFirestore(cleanEmail) || await findUserProfileInFirestore(fbUser.uid);
-        if (existing) {
-          setStatusMessage('Welcome back! Logging into your workspace...');
-          setTimeout(() => {
-            onLogin(existing);
-          }, 300);
-          return;
+      if (isSupabaseConfigured) {
+        const { error } = await signInWithSupabaseGoogle();
+        if (error) {
+          console.warn('Supabase OAuth notice:', error);
+          setIsGoogleModalOpen(true);
         }
-
-        // 2. New Google user -> proceed to stream & goals
-        setName(resolvedName);
-        setEmail(cleanEmail);
-        setAuthMethod('google');
-        setIsGoogleModalOpen(false);
-        setStep('stream');
+      } else {
+        // Direct Google email sign-in modal
+        setIsGoogleModalOpen(true);
       }
     } catch (err: any) {
-      console.warn('Firebase Google Sign-In notice:', err);
-      const isDomainError = err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain');
-      const isPopupBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup') || err?.code === 'auth/cancelled-popup-request';
-
-      if (isDomainError) {
-        // Firebase unauthorized domain -> provide direct email fallback so user is never blocked
-        setShowDomainGuide(true);
-        setAuthError(
-          'Firebase Google Auth domain unauthorized hai. Aap bina kisi rukawat ke niche apna Google email enter karke direct login kar sakte hain.'
-        );
-        setIsGoogleModalOpen(true);
-      } else if (isPopupBlocked) {
-        setAuthError('Browser popup block hua. Niche apna Google email dal kar direct login kar sakte hain.');
-        setIsGoogleModalOpen(true);
-      } else if (err?.code !== 'auth/popup-closed-by-user') {
-        setAuthError(err?.message || 'Google Sign-in failed. Please enter your email below.');
-      }
+      console.warn('Google Sign-In notice:', err);
+      setIsGoogleModalOpen(true);
     } finally {
-      setIsFirebaseLoading(false);
+      setIsLoading(false);
       setStatusMessage('');
     }
   };
 
-  // Direct Google email sign-in / Instant Login
+  // Direct Google email sign-in / Quick Select
   const handleGoogleQuickSelect = async (userEmail: string, userName: string) => {
     const cleanEmail = userEmail.trim().toLowerCase();
     if (!cleanEmail) return;
 
-    setIsFirebaseLoading(true);
+    setIsLoading(true);
     setAuthError(null);
-    setStatusMessage('Connecting with Firebase Cloud Firestore...');
+    setStatusMessage('Connecting with Supabase Database...');
     try {
-      await ensureFirebaseAuth().catch(() => {});
-      // Check existing user in Firestore or Cloud SQL PostgreSQL
-      const existing = await findUserProfileInFirestore(cleanEmail) || await findSqlUser(cleanEmail);
+      // Check existing user in Supabase
+      const existing = await findUserProfileInSupabase(cleanEmail);
       if (existing) {
         setStatusMessage('Welcome back! Loading your focus workspace...');
         setTimeout(() => {
@@ -230,12 +155,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       setIsGoogleModalOpen(false);
       setStep('stream');
     } finally {
-      setIsFirebaseLoading(false);
+      setIsLoading(false);
       setStatusMessage('');
     }
   };
 
-  // Email Submit Handler: checks Firestore first!
+  // Email Submit Handler: checks Supabase first
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
@@ -244,17 +169,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       return;
     }
 
-    setIsFirebaseLoading(true);
+    setIsLoading(true);
     setAuthError(null);
-    setStatusMessage('Firebase se connect ho rha hai...');
+    setStatusMessage('Supabase se connect ho rha hai...');
 
     try {
-      // 1. Authenticate with Firebase Auth or fallback session (catch silently so domain errors never block email sign-in)
-      await authenticateWithEmailOrFallback(cleanEmail, password).catch(() => {});
+      // 1. Authenticate with Supabase Auth
+      await authenticateWithSupabaseEmail(cleanEmail, password).catch(() => {});
 
-      // 2. Check if user already exists in Firestore, Cloud SQL, or locally
-      setStatusMessage('Checking user profile in database...');
-      const existingUser = await findUserProfileInFirestore(cleanEmail) || await findSqlUser(cleanEmail);
+      // 2. Check if user already exists in Supabase or locally
+      setStatusMessage('Checking user profile in Supabase...');
+      const existingUser = await findUserProfileInSupabase(cleanEmail);
       if (existingUser) {
         setStatusMessage('Welcome back! Account found, workspace opening...');
         setTimeout(() => {
@@ -281,12 +206,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       setAuthMethod('email');
       setStep('stream');
     } catch (err: any) {
-      console.error('Firebase Auth error:', err);
-      // Fallback: proceed to onboarding rather than locking the user out
+      console.error('Supabase Auth error:', err);
       setAuthMethod('email');
       setStep('stream');
     } finally {
-      setIsFirebaseLoading(false);
+      setIsLoading(false);
       setStatusMessage('');
     }
   };
@@ -296,8 +220,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) return;
 
-    setIsFirebaseLoading(true);
-    setStatusMessage('Creating your profile in Firebase Firestore...');
+    setIsLoading(true);
+    setStatusMessage('Creating your profile in Supabase Database...');
     setAuthError(null);
 
     const safeId = 'usr_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
@@ -322,16 +246,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     };
 
     try {
-      // Authenticate with Firebase & persist to Firestore
-      await authenticateWithEmailOrFallback(cleanEmail, password).catch(() => {});
-      await syncUserProfileToFirestore(newUser);
+      await syncUserProfileToSupabase(newUser);
       onLogin(newUser);
     } catch (err: any) {
-      console.warn('Firestore sync fallback:', err);
-      // Ensure user is never blocked
+      console.warn('Supabase sync fallback:', err);
       onLogin(newUser);
     } finally {
-      setIsFirebaseLoading(false);
+      setIsLoading(false);
       setStatusMessage('');
     }
   };
@@ -388,7 +309,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     <button
                       key={u.id}
                       type="button"
-                      disabled={isFirebaseLoading}
+                      disabled={isLoading}
                       onClick={() => handleQuickResume(u)}
                       className="w-full flex items-center justify-between p-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800/80 hover:border-zinc-700 transition-all text-left group"
                     >
@@ -423,7 +344,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 <h2 className="text-base font-bold text-white">Sign In to Your Workspace</h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50">
                   <Database className="h-2.5 w-2.5 text-emerald-400" />
-                  Cloud SQL (PostgreSQL) Connected
+                  Supabase Connected
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mb-5">
@@ -447,23 +368,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </div>
               )}
 
-              {isFirebaseLoading && statusMessage && (
+              {isLoading && statusMessage && (
                 <div className="mb-4 rounded-xl border border-zinc-700 bg-zinc-900/90 p-3 text-xs text-zinc-300 flex items-center gap-2.5 animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin text-white flex-shrink-0" />
                   <span>{statusMessage}</span>
                 </div>
               )}
 
-
-
-              {/* Real Google Sign In Direct Option */}
+              {/* Google Sign In Option */}
               <button
                 type="button"
-                disabled={isFirebaseLoading}
-                onClick={handleRealFirebaseGoogleSignIn}
+                disabled={isLoading}
+                onClick={handleGoogleSignIn}
                 className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs transition-all shadow-md active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed mb-5"
               >
-                {isFirebaseLoading ? (
+                {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-white" />
                 ) : (
                   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -493,7 +412,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   <div className="w-full border-t border-zinc-800" />
                 </div>
                 <span className="relative bg-zinc-950 px-3 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                  Or Sign In with Any Email
+                  Or Sign In with Email
                 </span>
               </div>
 
@@ -526,7 +445,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Tejas Kapoor"
+                    placeholder="Enter your full name"
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:border-white focus:outline-none transition-colors"
                   />
                 </div>
@@ -552,13 +471,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
                 <button
                   type="submit"
-                  disabled={isFirebaseLoading}
+                  disabled={isLoading}
                   className="w-full py-3 px-4 rounded-xl bg-white hover:bg-zinc-200 text-black font-extrabold text-xs transition-all shadow-lg flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isFirebaseLoading ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin text-black" />
-                      <span>Connecting to Firebase...</span>
+                      <span>Connecting to Supabase...</span>
                     </>
                   ) : (
                     <>
@@ -730,14 +649,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </button>
                 <button
                   type="button"
-                  disabled={isFirebaseLoading}
+                  disabled={isLoading}
                   onClick={handleCompleteSetup}
                   className="py-2.5 px-6 rounded-xl bg-white hover:bg-zinc-200 text-black font-extrabold text-xs transition-all shadow-xl flex items-center gap-2 disabled:opacity-50"
                 >
-                  {isFirebaseLoading ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin text-black" />
-                      <span>Saving to Firebase...</span>
+                      <span>Saving to Supabase...</span>
                     </>
                   ) : (
                     <>
@@ -752,7 +671,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         )}
       </main>
 
-      {/* Google Sign-in Direct Input Modal (Instant Fallback if unauthorized-domain or popup blocked) */}
+      {/* Google Sign-in Direct Input Modal */}
       {isGoogleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn overflow-y-auto">
           <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl my-8">
@@ -780,7 +699,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </div>
                 <div>
                   <span className="text-sm font-bold text-white block">Google Account Login</span>
-                  <span className="text-[10px] text-zinc-400 font-mono">Instant 1-Click Access</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">Supabase Auth</span>
                 </div>
               </div>
               <button
@@ -792,7 +711,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
 
             <p className="text-xs text-zinc-400 my-4 leading-relaxed">
-              Apna Google Email enter karein. Agar aapka account pehle se Firebase mein hai toh direct login ho jaayega:
+              Apna Google Email enter karein. Agar aapka account pehle se database mein hai toh direct login ho jaayega:
             </p>
 
             {/* Direct Google Account Form */}
@@ -837,10 +756,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
               <button
                 type="submit"
-                disabled={isFirebaseLoading}
+                disabled={isLoading}
                 className="w-full py-2.5 rounded-xl bg-white text-black font-extrabold text-xs hover:bg-zinc-200 transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                {isFirebaseLoading ? (
+                {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-black" />
                 ) : (
                   <span>Continue with this Email</span>
@@ -848,55 +767,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               </button>
             </form>
 
-            {/* Why unauthorized-domain occurs & 2-step permanent fix */}
-            <div className="pt-3 border-t border-zinc-900">
-              <button
-                type="button"
-                onClick={() => setShowDomainGuide(!showDomainGuide)}
-                className="w-full flex items-center justify-between text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Info className="h-3.5 w-3.5 text-zinc-400" />
-                  Yeh "auth/unauthorized-domain" error kyu aaya aur isko whitelist kaise karein?
-                </span>
-                <span className="font-mono text-xs">{showDomainGuide ? '▲' : '▼'}</span>
-              </button>
-
-              {showDomainGuide && (
-                <div className="mt-2.5 p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] text-zinc-300 space-y-2">
-                  <p className="text-zinc-400 leading-relaxed">
-                    Firebase Google OAuth popup sirf un domains par chalta hai jo Firebase Console mein added hote hain. Preview app ka domain:
-                  </p>
-                  
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-black/60 border border-zinc-800 font-mono text-[11px]">
-                    <span className="truncate flex-1 text-emerald-400">{currentHostname}</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyDomain}
-                      className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white flex items-center gap-1 text-[10px] flex-shrink-0"
-                    >
-                      {copiedDomain ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                      <span>{copiedDomain ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-1 text-zinc-400 pt-1">
-                    <p><strong>Permanent fix:</strong></p>
-                    <p>1. Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains par jayein.</p>
-                    <p>2. "Add domain" par click karke <code>{currentHostname}</code> paste karein.</p>
-                  </div>
-
-                  <a
-                    href="https://console.firebase.google.com/project/teak-dahlia-dpthm/authentication/settings"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-white hover:text-emerald-400 font-semibold underline pt-1"
-                  >
-                    <span>Firebase Console Authorized Domains Kholiye</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
+            {/* Supabase info note */}
+            <div className="pt-3 border-t border-zinc-900 flex items-center gap-2 text-[11px] text-zinc-400">
+              <Info className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+              <span>Full Supabase Database & Auth is active on this platform.</span>
             </div>
           </div>
         </div>
@@ -907,7 +781,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         <div>
           <span>© 2026 Focura · AI-Powered Smart Study Platform</span>
           <span className="mx-2">·</span>
-          <span>Firebase Cloud Storage & Local Computer Vision Privacy</span>
+          <span>Supabase Database & Local Computer Vision Privacy</span>
         </div>
         <div className="mt-2 sm:mt-0 font-mono text-[11px] text-zinc-400">
           Client-Side Vision Engine v2.4

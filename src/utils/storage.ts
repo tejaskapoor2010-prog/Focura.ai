@@ -1,11 +1,11 @@
 import { UserProfile, StudySession, RevisionCard, SubjectItem, StreamType } from '../types';
 import { DEFAULT_SUBJECTS } from '../data/streams';
 import { 
-  syncUserProfileToFirestore, 
-  saveSessionToFirestore, 
-  saveRevisionToFirestore,
-  getUserSessionsFromFirestore 
-} from '../firebase';
+  syncUserProfileToSupabase, 
+  saveSessionToSupabase, 
+  saveRevisionToSupabase,
+  getUserSessionsFromSupabase 
+} from '../supabase';
 import { recordServerLogin, recordServerSession } from './serverTelemetry';
 
 const STORAGE_KEYS = {
@@ -61,8 +61,8 @@ export function saveUserProfile(user: UserProfile): void {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(allUsers));
     }
 
-    // Persist to Cloud Firestore
-    syncUserProfileToFirestore(user).catch(() => {});
+    // Persist to Supabase Database
+    syncUserProfileToSupabase(user).catch(() => {});
 
     // Persist to Cloud SQL Relational Database
     fetch('/api/db/user', {
@@ -116,8 +116,8 @@ export function saveUserSession(userId: string, session: StudySession): void {
     sessions.unshift(session);
     localStorage.setItem(`${STORAGE_KEYS.SESSIONS_PREFIX}${userId}`, JSON.stringify(sessions));
 
-    // Persist session to Cloud Firestore
-    saveSessionToFirestore(userId, session).catch(() => {});
+    // Persist session to Supabase Database
+    saveSessionToSupabase(userId, session).catch(() => {});
 
     // Persist session to Cloud SQL Relational Database
     fetch('/api/db/session', {
@@ -175,8 +175,8 @@ export function saveUserRevisionCard(userId: string, card: RevisionCard): void {
     }
     localStorage.setItem(`${STORAGE_KEYS.REVISION_PREFIX}${userId}`, JSON.stringify(cards));
 
-    // Persist revision to Cloud Firestore
-    saveRevisionToFirestore(userId, card).catch(() => {});
+    // Persist revision to Supabase Database
+    saveRevisionToSupabase(userId, card).catch(() => {});
 
     // Persist revision to Cloud SQL Relational Database
     fetch('/api/db/revision', {
