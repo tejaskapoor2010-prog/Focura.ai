@@ -64,6 +64,13 @@ export function saveUserProfile(user: UserProfile): void {
     // Persist to Cloud Firestore
     syncUserProfileToFirestore(user).catch(() => {});
 
+    // Persist to Cloud SQL Relational Database
+    fetch('/api/db/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    }).catch(() => {});
+
     // Record login on backend server
     recordServerLogin(user).catch(() => {});
   } catch {
@@ -111,6 +118,13 @@ export function saveUserSession(userId: string, session: StudySession): void {
 
     // Persist session to Cloud Firestore
     saveSessionToFirestore(userId, session).catch(() => {});
+
+    // Persist session to Cloud SQL Relational Database
+    fetch('/api/db/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session),
+    }).catch(() => {});
 
     // Record session & focus score on backend server
     recordServerSession(userId, session).catch(() => {});
@@ -163,6 +177,13 @@ export function saveUserRevisionCard(userId: string, card: RevisionCard): void {
 
     // Persist revision to Cloud Firestore
     saveRevisionToFirestore(userId, card).catch(() => {});
+
+    // Persist revision to Cloud SQL Relational Database
+    fetch('/api/db/revision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(card),
+    }).catch(() => {});
   } catch {
     //
   }

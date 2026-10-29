@@ -6,6 +6,15 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { 
+  upsertSqlUser, 
+  getSqlUserByUid, 
+  getSqlUserByEmail, 
+  saveSqlStudySession, 
+  getSqlStudySessions, 
+  saveSqlRevisionCard, 
+  getSqlRevisionCards 
+} from './src/db/queries.ts';
 
 dotenv.config();
 
@@ -222,6 +231,18 @@ app.post('/api/track/login', (req, res) => {
     }
 
     saveTrackingDb(db);
+
+    // Synchronize to PostgreSQL Cloud SQL
+    upsertSqlUser({
+      id: cleanId,
+      name: name || 'Student',
+      email: cleanEmail,
+      stream: stream || 'science',
+      targetExam: targetExam || '',
+      provider: provider || 'email',
+      avatar: avatar || '',
+    }).catch((err) => console.warn('SQL user sync notice:', err?.message));
+
     res.json({
       success: true,
       message: 'Login tracked on server',
@@ -231,6 +252,80 @@ app.post('/api/track/login', (req, res) => {
   } catch (err: any) {
     console.error('Error tracking login:', err);
     res.status(500).json({ error: 'Internal server error tracking login' });
+  }
+});
+
+// ============================================================================
+// CLOUD SQL (POSTGRESQL RELATIONAL DATABASE) API ENDPOINTS
+// ============================================================================
+
+app.post('/api/db/user', async (req, res) => {
+  try {
+    const user = await upsertSqlUser(req.body);
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('API /api/db/user error:', error);
+    res.status(500).json({ error: error.message || 'Failed to save user in SQL database' });
+  }
+});
+
+app.get('/api/db/user/:uid', async (req, res) => {
+  try {
+    const user = await getSqlUserByUid(req.params.uid);
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('API /api/db/user/:uid error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get user from SQL database' });
+  }
+});
+
+app.get('/api/db/user-by-email/:email', async (req, res) => {
+  try {
+    const user = await getSqlUserByEmail(req.params.email);
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('API /api/db/user-by-email error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get user by email from SQL database' });
+  }
+});
+
+app.post('/api/db/session', async (req, res) => {
+  try {
+    const session = await saveSqlStudySession(req.body);
+    res.json({ success: true, session });
+  } catch (error: any) {
+    console.error('API /api/db/session error:', error);
+    res.status(500).json({ error: error.message || 'Failed to save session in SQL database' });
+  }
+});
+
+app.get('/api/db/sessions/:userId', async (req, res) => {
+  try {
+    const sessions = await getSqlStudySessions(req.params.userId);
+    res.json({ success: true, sessions });
+  } catch (error: any) {
+    console.error('API /api/db/sessions error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get sessions from SQL database' });
+  }
+});
+
+app.post('/api/db/revision', async (req, res) => {
+  try {
+    const card = await saveSqlRevisionCard(req.body);
+    res.json({ success: true, card });
+  } catch (error: any) {
+    console.error('API /api/db/revision error:', error);
+    res.status(500).json({ error: error.message || 'Failed to save revision card in SQL database' });
+  }
+});
+
+app.get('/api/db/revisions/:userId', async (req, res) => {
+  try {
+    const cards = await getSqlRevisionCards(req.params.userId);
+    res.json({ success: true, cards });
+  } catch (error: any) {
+    console.error('API /api/db/revisions error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get revision cards from SQL database' });
   }
 });
 

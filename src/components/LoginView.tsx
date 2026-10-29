@@ -34,6 +34,32 @@ interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
 }
 
+async function findSqlUser(cleanEmail: string): Promise<UserProfile | null> {
+  try {
+    const res = await fetch(`/api/db/user-by-email/${encodeURIComponent(cleanEmail)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.user) {
+        return {
+          id: data.user.uid,
+          name: data.user.name,
+          email: data.user.email,
+          avatar: data.user.avatar || '',
+          stream: (data.user.stream as StreamType) || 'science',
+          targetExam: data.user.targetExam || undefined,
+          dailyGoalMinutes: data.user.dailyGoalMinutes || 120,
+          streakDays: data.user.streakDays || 1,
+          lastActiveDate: data.user.lastActiveDate || new Date().toISOString().split('T')[0],
+          provider: (data.user.provider as 'google' | 'email') || 'email',
+          createdAt: data.user.createdAt || new Date().toISOString(),
+          subscription: data.user.subscription ? JSON.parse(data.user.subscription) : undefined,
+        };
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [step, setStep] = useState<'auth' | 'stream' | 'goal'>('auth');
   const [authMethod, setAuthMethod] = useState<'google' | 'email'>('email');
@@ -165,8 +191,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     setStatusMessage('Connecting with Firebase Cloud Firestore...');
     try {
       await ensureFirebaseAuth().catch(() => {});
-      // Check existing user in Firestore
-      const existing = await findUserProfileInFirestore(cleanEmail);
+      // Check existing user in Firestore or Cloud SQL PostgreSQL
+      const existing = await findUserProfileInFirestore(cleanEmail) || await findSqlUser(cleanEmail);
       if (existing) {
         setStatusMessage('Welcome back! Loading your focus workspace...');
         setTimeout(() => {
@@ -226,13 +252,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       // 1. Authenticate with Firebase Auth or fallback session (catch silently so domain errors never block email sign-in)
       await authenticateWithEmailOrFallback(cleanEmail, password).catch(() => {});
 
-      // 2. Check if user already exists in Firestore or locally
-      setStatusMessage('Checking user profile in Firestore...');
-      const existingFirestore = await findUserProfileInFirestore(cleanEmail);
-      if (existingFirestore) {
+      // 2. Check if user already exists in Firestore, Cloud SQL, or locally
+      setStatusMessage('Checking user profile in database...');
+      const existingUser = await findUserProfileInFirestore(cleanEmail) || await findSqlUser(cleanEmail);
+      if (existingUser) {
         setStatusMessage('Welcome back! Account found, workspace opening...');
         setTimeout(() => {
-          onLogin(existingFirestore);
+          onLogin(existingUser);
         }, 400);
         return;
       }
@@ -397,7 +423,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 <h2 className="text-base font-bold text-white">Sign In to Your Workspace</h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50">
                   <Database className="h-2.5 w-2.5 text-emerald-400" />
-                  Firebase Connected
+                  Cloud SQL (PostgreSQL) Connected
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mb-5">
