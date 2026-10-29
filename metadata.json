@@ -1,0 +1,10 @@
+{
+  "name": "Remix Focura - AI-Powered Smart Study \u0026 Focus Platform",
+  "description": "Smart study platform combining Computer Vision-based focus tracking, AI focus scoring, distraction control, and subject analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

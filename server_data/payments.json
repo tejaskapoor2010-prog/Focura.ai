@@ -1,0 +1,55 @@
+{
+  "payments": [
+    {
+      "id": "pay_direct_mv9k22ds",
+      "orderId": "manual_mv9k22dt",
+      "paymentId": "pay_direct_mv9k22ds",
+      "userId": "usr_test_verification",
+      "userName": "Test Student",
+      "userEmail": "test@student.com",
+      "plan": "ultra_premium",
+      "amount": 599,
+      "currency": "INR",
+      "status": "captured",
+      "method": "UPI Direct Test",
+      "createdAt": "2026-10-15T13:09:06.832Z",
+      "verified": true,
+      "isSandbox": false
+    },
+    {
+      "id": "pay_direct_mv9jymu8",
+      "orderId": "manual_mv9jymu8",
+      "paymentId": "pay_direct_mv9jymu8",
+      "userId": "usr_dawdwsd_gmail_com",
+      "userName": "Sasdsda",
+      "userEmail": "dawdwsd@gmail.com",
+      "plan": "ultra_premium",
+      "amount": 599,
+      "currency": "INR",
+      "status": "captured",
+      "method": "FamPay UPI Direct",
+      "createdAt": "2026-10-15T13:06:26.720Z",
+      "verified": true,
+      "isSandbox": false
+    },
+    {
+      "id": "pay_test_demo",
+      "orderId": "order_test_demo",
+      "paymentId": "pay_test_demo",
+      "signature": "test_signature",
+      "userId": "usr_dawdwsd_gmail_com",
+      "userName": "Sasdsda",
+      "userEmail": "dawdwsd@gmail.com",
+      "plan": "ultra_premium",
+      "amount": 599,
+      "currency": "INR",
+      "status": "captured",
+      "method": "Razorpay UPI / Cards / NetBanking",
+      "createdAt": "2026-10-15T12:41:24.774Z",
+      "verified": true,
+      "isSandbox": false
+    }
+  ],
+  "totalRevenueInr": 1797,
+  "lastUpdated": "2026-10-15T13:09:06.833Z"
+}

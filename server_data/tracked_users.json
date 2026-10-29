@@ -1,0 +1,36 @@
+{
+  "users": {
+    "usr_dawdwsd_gmail_com": {
+      "id": "usr_dawdwsd_gmail_com",
+      "name": "Sasdsda",
+      "email": "dawdwsd@gmail.com",
+      "stream": "commerce",
+      "targetExam": "CA Foundation / Inter",
+      "provider": "google",
+      "avatar": "https://api.dicebear.com/7.x/initials/svg?seed=Sasdsda&backgroundColor=000000&textColor=ffffff",
+      "firstLoginAt": "2026-10-15T12:31:12.569Z",
+      "lastLoginAt": "2026-10-15T12:31:13.078Z",
+      "totalLogins": 3,
+      "lastIp": "103.72.9.2",
+      "lastUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "totalFocusMinutes": 0,
+      "totalSessions": 0,
+      "averageFocusScore": 0,
+      "latestFocusScore": 0,
+      "highestFocusScore": 0,
+      "sessions": [],
+      "subscription": {
+        "plan": "ultra_premium",
+        "status": "active",
+        "isDemo": false,
+        "activatedAt": "2026-10-15T12:41:24.774Z",
+        "demoOrderId": "order_test_demo",
+        "paymentMethod": "Razorpay (pay_test_demo)",
+        "amountPaid": 599,
+        "razorpayPaymentId": "pay_test_demo",
+        "razorpayOrderId": "order_test_demo"
+      }
+    }
+  },
+  "lastUpdated": "2026-10-15T12:41:24.774Z"
+}
